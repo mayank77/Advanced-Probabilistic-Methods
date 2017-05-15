@@ -1,0 +1,101 @@
+% Censored Bayesian polynomial regression
+% Template for the project work
+% Machine Learning: Advanced Probabilistic Methods
+% 2017
+
+% Set the seed of the random number generator
+rng(1);
+
+% Set parameters
+alpha = 1; % Prior precision
+beta = 1; % Noise precision
+
+max_degree = 5; % We consider polynomials with degree 1,...,max_degree
+
+% CHOOSE APPROPRIATE VALUES
+n_iter = 50; % Number of iterations of the EM algorithm
+n_starts = 10; % Number of random starts of EM
+%%%%%%%%%%%%%%%%%%%%
+%CHANGE FROM 1 to 10
+%%%%%%%%%%%%%%%%%%%%
+
+% Load data
+load project_data.mat; % x: covariate, y: survival time, c: c(i)=0 -> y(i) observed value, c(i)=1 -> y(i) censored value
+n_obs = length(y);
+c_star = min(y(c==1));
+
+% Initialize data structures for storing results
+bics = zeros(max_degree, 1);
+ws = cell(max_degree, 1);
+
+for d = 1:max_degree
+    % YOU MAY WANT TO ADD SOME INITIALIZATIONS HERE
+    
+    best_log_post = -Inf;
+    best_w = -Inf*ones(d+1, 1); % MAP estimate for parameters
+    
+    for s = 1:n_starts
+        w = (mvnrnd(zeros(1, d+1), alpha^-1 * eye(d+1)))'; % Initialize weights
+        log_posts = zeros(n_iter + 1, 1); % incomplete data log-posterior
+        log_posts(1) = logPosterior(alpha, beta, w, x, y); % log-posterior before first iteration
+        % IMPLEMENT A FUNCTION TO COMPUTE LOG-POSTERIOR OF OBSERVED DATA
+        
+        for i = 1:n_iter
+           % E-step
+           % IMPLEMENT E-STEP HERE
+            zs_approx = approximate_latents(w, x, y, c, c_star, beta);
+            % M-step
+            %IMPLEMENT M-STEP HERE
+            w = update_weights(zs_approx, x, alpha, beta, d);
+            
+            % Compute log-posterior
+            log_posts(i+1) = logPosterior(alpha, beta, w, x, zs_approx);
+        end
+        
+        if log_posts(n_iter+1) > best_log_post
+           best_log_post =  log_posts(n_iter+1);
+           best_w = w;
+           convergence = log_posts;
+        end
+        
+    end
+    
+     % Plotting
+     x_lim = 2;
+     x_vals = -1*x_lim:0.1:x_lim;
+     y_vals = zeros(length(x_vals),1);
+     for i=1:length(x_vals)
+        y_vals(i) =  best_w' * phiX(x_vals(i), length(best_w)-1);% ADD FORMULA HERE
+     end
+     
+     
+     % COMPUTE THESE VALUES
+     comp_w = best_w; % Fit a regression model for y
+     comp_y = zeros(length(x_vals),1);
+     for i=length(x_vals)
+        comp_y(i) = comp_w' * phiX(x_vals(i), length(comp_w)-1); 
+     end 
+     
+     
+         
+      figure;
+      subplot(2, 1, 1);
+      hold on;
+      scatter(x(c==0), y(c==0));
+      scatter(x(c), y(c), 'Marker', '*');
+      plot(x_vals, y_vals);
+      plot(x_vals, comp_y, 'Color', 'b');
+      title(['Polynomial of degree ' num2str(d)]);
+      legend('Observed', 'Censored', 'Censored regression', 'Standard regression');
+      hold off;
+      
+       subplot(2, 1, 2);
+       plot(0:n_iter, convergence);
+       title('Log-posterior');
+%     % Compute BIC
+       numParams = d+1;
+       bics(d) = -2*best_log_post + numParams*log(100) ; % IMPLEMENT THIS FUNCTION
+%     
+%     % Store MAP estimate
+    ws{d} = best_w;
+end
